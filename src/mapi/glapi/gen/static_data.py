@@ -1692,6 +1692,12 @@ offsets = {
     "TexPageCommitmentARB": 1656,
     "TexturePageCommitmentEXT": 1657,
     "TexPageCommitmentEXT": 1658,
+    "CurrentPaletteMatrixOES" : 1659,
+    "LoadPaletteFromModelViewMatrixOES" : 1660,
+    "MatrixIndexPointerOES" : 1661,
+    "WeightPointerOES" : 1662,
+    "RenderbufferStorageMultisampleIMG" : 1663,
+    "FramebufferTexture2DMultisampleIMG" : 1664,
 }
 
 functions = [
