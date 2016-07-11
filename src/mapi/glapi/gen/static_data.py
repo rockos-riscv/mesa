@@ -1703,6 +1703,7 @@ offsets = {
     "GetFramebufferPixelLocalStorageSizeEXT" : 1667,
     "FramebufferTexture2DDownsampleIMG" : 1668,
     "FramebufferTextureLayerDownsampleIMG" : 1669,
+    "FramebufferTextureMultiviewOVR" : 1670,
 }
 
 functions = [
