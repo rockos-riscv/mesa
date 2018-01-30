@@ -1705,6 +1705,8 @@ offsets = {
     "FramebufferTextureLayerDownsampleIMG" : 1669,
     "FramebufferTextureMultiviewOVR" : 1670,
     "FramebufferTextureMultisampleMultiviewOVR" : 1671,
+    "MultiDrawArraysIndirectEXT" : 1672,
+    "MultiDrawElementsIndirectEXT" : 1673,
 }
 
 functions = [
