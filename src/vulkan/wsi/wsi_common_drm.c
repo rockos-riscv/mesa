@@ -91,6 +91,7 @@ wsi_device_matches_drm_fd(const struct wsi_device *wsi, int drm_fd)
 static uint32_t
 select_memory_type(const struct wsi_device *wsi,
                    bool want_device_local,
+                   bool want_host_visible,
                    uint32_t type_bits)
 {
    assert(type_bits);
@@ -99,8 +100,10 @@ select_memory_type(const struct wsi_device *wsi,
    for (uint32_t i = 0; i < wsi->memory_props.memoryTypeCount; i++) {
        const VkMemoryType type = wsi->memory_props.memoryTypes[i];
        bool local = type.propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+       bool host = type.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-       if ((type_bits & (1 << i)) && local == want_device_local)
+       if ((type_bits & (1 << i)) && local == want_device_local &&
+            (!want_host_visible || host))
          return i;
        all_local &= local;
    }
@@ -108,6 +111,8 @@ select_memory_type(const struct wsi_device *wsi,
    /* ignore want_device_local when all memory types are device-local */
    if (all_local) {
       assert(!want_device_local);
+      /* currently, host visibility is only needed with device local */
+      assert(!want_host_visible);
       return ffs(type_bits) - 1;
    }
 
@@ -139,6 +144,7 @@ get_modifier_props(const struct wsi_image_info *info, uint64_t modifier)
 static VkResult
 wsi_create_native_image_mem(const struct wsi_swapchain *chain,
                             const struct wsi_image_info *info,
+                            bool host_visible,
                             struct wsi_image *image);
 
 VkResult
@@ -287,6 +293,7 @@ fail_oom:
 static VkResult
 wsi_create_native_image_mem(const struct wsi_swapchain *chain,
                             const struct wsi_image_info *info,
+                            bool host_visible,
                             struct wsi_image *image)
 {
    const struct wsi_device *wsi = chain->wsi;
@@ -335,7 +342,8 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .pNext = sw_host_ptr ? (void *)&host_ptr_info : (void *)&memory_dedicated_info,
       .allocationSize = reqs.size,
-      .memoryTypeIndex = select_memory_type(wsi, true, reqs.memoryTypeBits),
+      .memoryTypeIndex = select_memory_type(wsi, true, host_visible,
+                                            reqs.memoryTypeBits),
    };
    result = wsi->AllocateMemory(chain->device, &memory_info,
                                 &chain->alloc, &image->memory);
@@ -431,6 +439,7 @@ align_u32(uint32_t v, uint32_t a)
 static VkResult
 wsi_create_prime_image_mem(const struct wsi_swapchain *chain,
                            const struct wsi_image_info *info,
+                           bool host_visible,
                            struct wsi_image *image)
 {
    const struct wsi_device *wsi = chain->wsi;
@@ -480,7 +489,8 @@ wsi_create_prime_image_mem(const struct wsi_swapchain *chain,
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .pNext = &prime_memory_dedicated_info,
       .allocationSize = linear_size,
-      .memoryTypeIndex = select_memory_type(wsi, false, reqs.memoryTypeBits),
+      .memoryTypeIndex = select_memory_type(wsi, false, host_visible,
+                                            reqs.memoryTypeBits),
    };
    result = wsi->AllocateMemory(chain->device, &prime_memory_info,
                                 &chain->alloc, &image->prime.memory);
@@ -504,7 +514,8 @@ wsi_create_prime_image_mem(const struct wsi_swapchain *chain,
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .pNext = &memory_dedicated_info,
       .allocationSize = reqs.size,
-      .memoryTypeIndex = select_memory_type(wsi, true, reqs.memoryTypeBits),
+      .memoryTypeIndex = select_memory_type(wsi, true, host_visible,
+                                            reqs.memoryTypeBits),
    };
    result = wsi->AllocateMemory(chain->device, &memory_info,
                                 &chain->alloc, &image->memory);

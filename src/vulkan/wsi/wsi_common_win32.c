@@ -375,7 +375,7 @@ wsi_win32_image_init(VkDevice device_h,
    struct wsi_win32_swapchain *chain = (struct wsi_win32_swapchain *) drv_chain;
 
    VkResult result = wsi_create_image(&chain->base, &chain->base.image_info,
-                                      &image->base);
+                                      false, &image->base);
    if (result != VK_SUCCESS)
       return result;
 

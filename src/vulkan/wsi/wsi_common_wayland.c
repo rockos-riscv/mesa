@@ -1148,7 +1148,7 @@ wsi_wl_image_init(struct wsi_wl_swapchain *chain,
    VkResult result;
 
    result = wsi_create_image(&chain->base, &chain->base.image_info,
-                             &image->base);
+                             false, &image->base);
    if (result != VK_SUCCESS)
       return result;
 

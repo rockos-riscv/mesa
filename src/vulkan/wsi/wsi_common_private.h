@@ -51,6 +51,7 @@ struct wsi_image_info {
 
    VkResult (*create_mem)(const struct wsi_swapchain *chain,
                           const struct wsi_image_info *info,
+                          bool host_visible,
                           struct wsi_image *image);
 
    VkResult (*finish_create)(const struct wsi_swapchain *chain,
@@ -158,6 +159,7 @@ wsi_destroy_image_info(const struct wsi_swapchain *chain,
 VkResult
 wsi_create_image(const struct wsi_swapchain *chain,
                  const struct wsi_image_info *info,
+                 bool host_visible,
                  struct wsi_image *image);
 void
 wsi_destroy_image(const struct wsi_swapchain *chain,

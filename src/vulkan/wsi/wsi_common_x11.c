@@ -1521,7 +1521,7 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
    int fence_fd;
 
    result = wsi_create_image(&chain->base, &chain->base.image_info,
-                             &image->base);
+                             chain->base.wsi->sw, &image->base);
    if (result != VK_SUCCESS)
       return result;
 

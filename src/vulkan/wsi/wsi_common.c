@@ -468,6 +468,7 @@ wsi_destroy_image_info(const struct wsi_swapchain *chain,
 VkResult
 wsi_create_image(const struct wsi_swapchain *chain,
                  const struct wsi_image_info *info,
+                 bool host_visible,
                  struct wsi_image *image)
 {
    const struct wsi_device *wsi = chain->wsi;
@@ -482,7 +483,7 @@ wsi_create_image(const struct wsi_swapchain *chain,
    if (result != VK_SUCCESS)
       goto fail;
 
-   result = info->create_mem(chain, info, image);
+   result = info->create_mem(chain, info, host_visible, image);
    if (result != VK_SUCCESS)
       goto fail;
 
