@@ -1005,7 +1005,7 @@ struct __DRIbufferRec {
 };
 
 #define __DRI_DRI2_LOADER "DRI_DRI2Loader"
-#define __DRI_DRI2_LOADER_VERSION 5
+#define __DRI_DRI2_LOADER_VERSION 6
 
 enum dri_loader_cap {
    /* Whether the loader handles RGBA channel ordering correctly. If not,
@@ -1086,6 +1086,17 @@ struct __DRIdri2LoaderExtensionRec {
      * \since 5
      */
     void (*destroyLoaderImageState)(void *loaderPrivate);
+
+    /**
+     * Get the display FD
+     *
+     * Get the FD of the display device.
+     *
+     * \param loaderPrivate The last parameter of createNewScreen or
+     *                      createNewScreen2.
+     * \since 6
+     */
+     int (*getDisplayFD)(void *loaderPrivate);
 };
 
 /**
@@ -2011,7 +2022,7 @@ struct __DRIimageList {
 };
 
 #define __DRI_IMAGE_LOADER "DRI_IMAGE_LOADER"
-#define __DRI_IMAGE_LOADER_VERSION 4
+#define __DRI_IMAGE_LOADER_VERSION 5
 
 struct __DRIimageLoaderExtensionRec {
     __DRIextension base;
@@ -2079,6 +2090,17 @@ struct __DRIimageLoaderExtensionRec {
      * \since 4
      */
     void (*destroyLoaderImageState)(void *loaderPrivate);
+
+    /**
+     * Get the display FD
+     *
+     * Get the FD of the display device.
+     *
+     * \param loaderPrivate The last parameter of createNewScreen or
+     *                      createNewScreen2.
+     * \since 5
+     */
+     int (*getDisplayFD)(void *loaderPrivate);
 };
 
 /**
