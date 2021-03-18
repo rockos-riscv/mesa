@@ -533,15 +533,13 @@ wsi_destroy_image(const struct wsi_swapchain *chain,
    wsi->DestroyBuffer(chain->device, image->prime.buffer, &chain->alloc);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-wsi_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
-                                       uint32_t queueFamilyIndex,
-                                       VkSurfaceKHR _surface,
-                                       VkBool32 *pSupported)
+VkResult
+wsi_common_get_surface_support(struct wsi_device *wsi_device,
+                               uint32_t queueFamilyIndex,
+                               VkSurfaceKHR _surface,
+                               VkBool32 *pSupported)
 {
-   VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
    ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
-   struct wsi_device *wsi_device = device->wsi_device;
    struct wsi_interface *iface = wsi_device->wsi[surface->platform];
 
    return iface->get_support(surface, wsi_device,
@@ -549,14 +547,26 @@ wsi_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
-wsi_GetPhysicalDeviceSurfaceCapabilitiesKHR(
-   VkPhysicalDevice physicalDevice,
-   VkSurfaceKHR _surface,
-   VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
+wsi_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
+                                       uint32_t queueFamilyIndex,
+                                       VkSurfaceKHR _surface,
+                                       VkBool32 *pSupported)
 {
    VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
-   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_device *wsi_device = device->wsi_device;
+
+   return wsi_common_get_surface_support(wsi_device,
+					 queueFamilyIndex,
+					 _surface,
+					 pSupported);
+}
+
+VkResult
+wsi_common_get_surface_capabilities(struct wsi_device *wsi_device,
+                                    VkSurfaceKHR _surface,
+                                    VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_interface *iface = wsi_device->wsi[surface->platform];
 
    VkSurfaceCapabilities2KHR caps2 = {
@@ -572,14 +582,26 @@ wsi_GetPhysicalDeviceSurfaceCapabilitiesKHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
-wsi_GetPhysicalDeviceSurfaceCapabilities2KHR(
+wsi_GetPhysicalDeviceSurfaceCapabilitiesKHR(
    VkPhysicalDevice physicalDevice,
+   VkSurfaceKHR _surface,
+   VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
+{
+   VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
+   struct wsi_device *wsi_device = device->wsi_device;
+
+   return wsi_common_get_surface_capabilities(wsi_device,
+                                              _surface,
+                                              pSurfaceCapabilities);
+}
+
+VkResult
+wsi_common_get_surface_capabilities2(
+   struct wsi_device *wsi_device,
    const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
    VkSurfaceCapabilities2KHR *pSurfaceCapabilities)
 {
-   VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
    ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, pSurfaceInfo->surface);
-   struct wsi_device *wsi_device = device->wsi_device;
    struct wsi_interface *iface = wsi_device->wsi[surface->platform];
 
    return iface->get_capabilities2(surface, wsi_device, pSurfaceInfo->pNext,
@@ -587,14 +609,26 @@ wsi_GetPhysicalDeviceSurfaceCapabilities2KHR(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
-wsi_GetPhysicalDeviceSurfaceCapabilities2EXT(
+wsi_GetPhysicalDeviceSurfaceCapabilities2KHR(
    VkPhysicalDevice physicalDevice,
+   const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+   VkSurfaceCapabilities2KHR *pSurfaceCapabilities)
+{
+   VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
+   struct wsi_device *wsi_device = device->wsi_device;
+
+   return wsi_common_get_surface_capabilities2(wsi_device,
+                                               pSurfaceInfo,
+                                               pSurfaceCapabilities);
+}
+
+VkResult
+wsi_common_get_surface_capabilities2ext(
+   struct wsi_device *wsi_device,
    VkSurfaceKHR _surface,
    VkSurfaceCapabilities2EXT *pSurfaceCapabilities)
 {
-   VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
    ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
-   struct wsi_device *wsi_device = device->wsi_device;
    struct wsi_interface *iface = wsi_device->wsi[surface->platform];
 
    assert(pSurfaceCapabilities->sType ==
@@ -634,18 +668,58 @@ wsi_GetPhysicalDeviceSurfaceCapabilities2EXT(
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
+wsi_GetPhysicalDeviceSurfaceCapabilities2EXT(
+   VkPhysicalDevice physicalDevice,
+   VkSurfaceKHR _surface,
+   VkSurfaceCapabilities2EXT *pSurfaceCapabilities)
+{
+   VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
+   struct wsi_device *wsi_device = device->wsi_device;
+
+   return wsi_common_get_surface_capabilities2ext(wsi_device,
+                                                  _surface,
+                                                  pSurfaceCapabilities);
+}
+
+VkResult
+wsi_common_get_surface_formats(struct wsi_device *wsi_device,
+                               VkSurfaceKHR _surface,
+                               uint32_t *pSurfaceFormatCount,
+                               VkSurfaceFormatKHR *pSurfaceFormats)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
+   struct wsi_interface *iface = wsi_device->wsi[surface->platform];
+
+   return iface->get_formats(surface, wsi_device,
+                             pSurfaceFormatCount, pSurfaceFormats);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
 wsi_GetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice,
                                        VkSurfaceKHR _surface,
                                        uint32_t *pSurfaceFormatCount,
                                        VkSurfaceFormatKHR *pSurfaceFormats)
 {
    VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
-   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_device *wsi_device = device->wsi_device;
+
+   return wsi_common_get_surface_formats(wsi_device,
+                                         _surface,
+                                         pSurfaceFormatCount,
+                                         pSurfaceFormats);
+}
+
+VkResult
+wsi_common_get_surface_formats2(struct wsi_device *wsi_device,
+                                const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+                                uint32_t *pSurfaceFormatCount,
+                                VkSurfaceFormat2KHR *pSurfaceFormats)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, pSurfaceInfo->surface);
    struct wsi_interface *iface = wsi_device->wsi[surface->platform];
 
-   return iface->get_formats(surface, wsi_device,
-                             pSurfaceFormatCount, pSurfaceFormats);
+   return iface->get_formats2(surface, wsi_device, pSurfaceInfo->pNext,
+                              pSurfaceFormatCount, pSurfaceFormats);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -655,12 +729,25 @@ wsi_GetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physicalDevice,
                                         VkSurfaceFormat2KHR *pSurfaceFormats)
 {
    VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
-   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, pSurfaceInfo->surface);
    struct wsi_device *wsi_device = device->wsi_device;
+
+   return wsi_common_get_surface_formats2(wsi_device,
+                                          pSurfaceInfo,
+                                          pSurfaceFormatCount,
+                                          pSurfaceFormats);
+}
+
+VkResult
+wsi_common_get_surface_present_modes(struct wsi_device *wsi_device,
+                                     VkSurfaceKHR _surface,
+                                     uint32_t *pPresentModeCount,
+                                     VkPresentModeKHR *pPresentModes)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_interface *iface = wsi_device->wsi[surface->platform];
 
-   return iface->get_formats2(surface, wsi_device, pSurfaceInfo->pNext,
-                              pSurfaceFormatCount, pSurfaceFormats);
+   return iface->get_present_modes(surface, pPresentModeCount,
+                                   pPresentModes);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -670,12 +757,25 @@ wsi_GetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice,
                                             VkPresentModeKHR *pPresentModes)
 {
    VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
-   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_device *wsi_device = device->wsi_device;
+
+   return wsi_common_get_surface_present_modes(wsi_device,
+                                               _surface,
+                                               pPresentModeCount,
+                                               pPresentModes);
+}
+
+VkResult
+wsi_common_get_present_rectangles(struct wsi_device *wsi_device,
+                                  VkSurfaceKHR _surface,
+                                  uint32_t* pRectCount,
+                                  VkRect2D* pRects)
+{
+   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_interface *iface = wsi_device->wsi[surface->platform];
 
-   return iface->get_present_modes(surface, pPresentModeCount,
-                                   pPresentModes);
+   return iface->get_present_rectangles(surface, wsi_device,
+                                        pRectCount, pRects);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -685,54 +785,47 @@ wsi_GetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice,
                                           VkRect2D *pRects)
 {
    VK_FROM_HANDLE(vk_physical_device, device, physicalDevice);
-   ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, _surface);
    struct wsi_device *wsi_device = device->wsi_device;
-   struct wsi_interface *iface = wsi_device->wsi[surface->platform];
 
-   return iface->get_present_rectangles(surface, wsi_device,
-                                        pRectCount, pRects);
+   return wsi_common_get_present_rectangles(wsi_device,
+                                            _surface,
+                                            pRectCount,
+                                            pRects);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-wsi_CreateSwapchainKHR(VkDevice _device,
-                       const VkSwapchainCreateInfoKHR *pCreateInfo,
-                       const VkAllocationCallbacks *pAllocator,
-                       VkSwapchainKHR *pSwapchain)
+VkResult
+wsi_common_create_swapchain(struct wsi_device *wsi_device,
+                            VkDevice _device,
+                            const VkSwapchainCreateInfoKHR *pCreateInfo,
+                            const VkAllocationCallbacks *allocator,
+                            VkSwapchainKHR *pSwapchain)
 {
-   VK_FROM_HANDLE(vk_device, device, _device);
    ICD_FROM_HANDLE(VkIcdSurfaceBase, surface, pCreateInfo->surface);
-   struct wsi_device *wsi_device = device->physical->wsi_device;
    struct wsi_interface *iface = wsi_device->wsi[surface->platform];
-   const VkAllocationCallbacks *alloc;
    struct wsi_swapchain *swapchain;
 
-   if (pAllocator)
-     alloc = pAllocator;
-   else
-     alloc = &device->alloc;
-
    VkResult result = iface->create_swapchain(surface, _device, wsi_device,
-                                             pCreateInfo, alloc,
+                                             pCreateInfo, allocator,
                                              &swapchain);
    if (result != VK_SUCCESS)
       return result;
 
-   swapchain->fences = vk_zalloc(alloc,
+   swapchain->fences = vk_zalloc(allocator,
                                  sizeof (*swapchain->fences) * swapchain->image_count,
                                  sizeof (*swapchain->fences),
                                  VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (!swapchain->fences) {
-      swapchain->destroy(swapchain, alloc);
+      swapchain->destroy(swapchain, allocator);
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
    if (swapchain->prime_blit_queue != VK_NULL_HANDLE) {
-      swapchain->prime_blit_semaphores = vk_zalloc(alloc,
+      swapchain->prime_blit_semaphores = vk_zalloc(allocator,
                                          sizeof (*swapchain->prime_blit_semaphores) * swapchain->image_count,
                                          sizeof (*swapchain->prime_blit_semaphores),
                                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
       if (!swapchain->prime_blit_semaphores) {
-         swapchain->destroy(swapchain, alloc);
+         swapchain->destroy(swapchain, allocator);
          return VK_ERROR_OUT_OF_HOST_MEMORY;
       }
    }
@@ -742,24 +835,55 @@ wsi_CreateSwapchainKHR(VkDevice _device,
    return VK_SUCCESS;
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL
+wsi_CreateSwapchainKHR(VkDevice _device,
+                       const VkSwapchainCreateInfoKHR *pCreateInfo,
+                       const VkAllocationCallbacks *pAllocator,
+                       VkSwapchainKHR *pSwapchain)
+{
+   VK_FROM_HANDLE(vk_device, device, _device);
+   struct wsi_device *wsi_device = device->physical->wsi_device;
+   const VkAllocationCallbacks *allocator;
+
+   if (pAllocator)
+     allocator = pAllocator;
+   else
+     allocator = &device->alloc;
+
+   return wsi_common_create_swapchain(wsi_device,
+                                      _device,
+                                      pCreateInfo,
+                                      allocator,
+                                      pSwapchain);
+}
+
+void
+wsi_common_destroy_swapchain(VkDevice _device,
+                             VkSwapchainKHR _swapchain,
+                             const VkAllocationCallbacks *allocator)
+{
+   VK_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
+
+   if (!swapchain)
+      return;
+
+   swapchain->destroy(swapchain, allocator);
+}
+
 VKAPI_ATTR void VKAPI_CALL
 wsi_DestroySwapchainKHR(VkDevice _device,
                         VkSwapchainKHR _swapchain,
                         const VkAllocationCallbacks *pAllocator)
 {
    VK_FROM_HANDLE(vk_device, device, _device);
-   VK_FROM_HANDLE(wsi_swapchain, swapchain, _swapchain);
-   const VkAllocationCallbacks *alloc;
-
-   if (!swapchain)
-      return;
+   const VkAllocationCallbacks *allocator;
 
    if (pAllocator)
-     alloc = pAllocator;
+     allocator = pAllocator;
    else
-     alloc = &device->alloc;
+     allocator = &device->alloc;
 
-   swapchain->destroy(swapchain, alloc);
+   wsi_common_destroy_swapchain(_device, _swapchain, allocator);
 }
 
 VkResult
@@ -828,7 +952,6 @@ wsi_common_acquire_next_image2(const struct wsi_device *wsi,
                                uint32_t *pImageIndex)
 {
    VK_FROM_HANDLE(wsi_swapchain, swapchain, pAcquireInfo->swapchain);
-   VK_FROM_HANDLE(vk_device, device, _device);
 
    VkResult result = swapchain->acquire_next_image(swapchain, pAcquireInfo,
                                                    pImageIndex);
@@ -842,6 +965,7 @@ wsi_common_acquire_next_image2(const struct wsi_device *wsi,
 
    if (pAcquireInfo->semaphore != VK_NULL_HANDLE &&
        wsi->signal_semaphore_with_memory) {
+      VK_FROM_HANDLE(vk_device, device, _device);
       VK_FROM_HANDLE(vk_semaphore, semaphore, pAcquireInfo->semaphore);
       struct wsi_image *image =
          swapchain->get_wsi_image(swapchain, *pImageIndex);
@@ -857,6 +981,7 @@ wsi_common_acquire_next_image2(const struct wsi_device *wsi,
 
    if (pAcquireInfo->fence != VK_NULL_HANDLE &&
        wsi->signal_fence_with_memory) {
+      VK_FROM_HANDLE(vk_device, device, _device);
       VK_FROM_HANDLE(vk_fence, fence, pAcquireInfo->fence);
       struct wsi_image *image =
          swapchain->get_wsi_image(swapchain, *pImageIndex);

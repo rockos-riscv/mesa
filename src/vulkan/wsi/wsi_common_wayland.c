@@ -42,6 +42,8 @@
 #include "vk_util.h"
 #include "wsi_common_entrypoints.h"
 #include "wsi_common_private.h"
+#include "wsi_common_wayland.h"
+#include "wayland-drm-client-protocol.h"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 
 #include <util/compiler.h>
@@ -608,7 +610,7 @@ registry_handle_global(void *data, struct wl_registry *registry,
 
       display->wl_drm =
          wl_registry_bind(registry, name, &wl_drm_interface, 2);
-      wl_drm_add_listener(display->drm.wl_drm, &drm_listener, display);
+      wl_drm_add_listener(display->wl_drm, &drm_listener, display);
    }
 
    if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0 && version >= 3) {
@@ -801,13 +803,10 @@ wsi_wl_display_unref(struct wsi_wl_display *display)
    vk_free(wsi->alloc, display);
 }
 
-VKAPI_ATTR VkBool32 VKAPI_CALL
-wsi_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice,
-                                                   uint32_t queueFamilyIndex,
-                                                   struct wl_display *wl_display)
+VkBool32
+wsi_wl_get_presentation_support(struct wsi_device *wsi_device,
+                                struct wl_display *wl_display)
 {
-   VK_FROM_HANDLE(vk_physical_device, pdevice, physicalDevice);
-   struct wsi_device *wsi_device = pdevice->wsi_device;
    struct wsi_wayland *wsi =
       (struct wsi_wayland *)wsi_device->wsi[VK_ICD_WSI_PLATFORM_WAYLAND];
 
@@ -818,6 +817,18 @@ wsi_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevi
       wsi_wl_display_finish(&display);
 
    return ret == VK_SUCCESS;
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL
+wsi_GetPhysicalDeviceWaylandPresentationSupportKHR(VkPhysicalDevice physicalDevice,
+                                                   uint32_t queueFamilyIndex,
+                                                   struct wl_display *wl_display)
+{
+   VK_FROM_HANDLE(vk_physical_device, pdevice, physicalDevice);
+   struct wsi_device *wsi_device = pdevice->wsi_device;
+
+   return wsi_wl_get_presentation_support(wsi_device,
+                                          wl_display);
 }
 
 static VkResult
@@ -1019,19 +1030,16 @@ wsi_wl_surface_get_present_rectangles(VkIcdSurfaceBase *surface,
    return vk_outarray_status(&out);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-wsi_CreateWaylandSurfaceKHR(VkInstance _instance,
-                            const VkWaylandSurfaceCreateInfoKHR *pCreateInfo,
-                            const VkAllocationCallbacks *pAllocator,
-                            VkSurfaceKHR *pSurface)
+VkResult wsi_create_wl_surface(const VkAllocationCallbacks *allocator,
+                               const VkWaylandSurfaceCreateInfoKHR *pCreateInfo,
+                               VkSurfaceKHR *pSurface)
 {
-   VK_FROM_HANDLE(vk_instance, instance, _instance);
    VkIcdSurfaceWayland *surface;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR);
 
-   surface = vk_alloc2(&instance->alloc, pAllocator, sizeof *surface, 8,
-                       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   surface = vk_alloc(allocator, sizeof *surface, 8,
+                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
    if (surface == NULL)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
 
@@ -1042,6 +1050,25 @@ wsi_CreateWaylandSurfaceKHR(VkInstance _instance,
    *pSurface = VkIcdSurfaceBase_to_handle(&surface->base);
 
    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+wsi_CreateWaylandSurfaceKHR(VkInstance _instance,
+                            const VkWaylandSurfaceCreateInfoKHR *pCreateInfo,
+                            const VkAllocationCallbacks *pAllocator,
+                            VkSurfaceKHR *pSurface)
+{
+   VK_FROM_HANDLE(vk_instance, instance, _instance);
+   const VkAllocationCallbacks *allocator;
+
+   if (pAllocator)
+     allocator = pAllocator;
+   else
+     allocator = &instance->alloc;
+
+   return wsi_create_wl_surface(allocator,
+                                pCreateInfo,
+                                pSurface);
 }
 
 struct wsi_wl_image {
