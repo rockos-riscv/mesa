@@ -357,6 +357,10 @@ if with_platform_tizen and _platforms.length() != 1
   error('tizen cannot be enabled at the same time as other platforms')
 endif
 
+if with_platform_null
+  null_dri_driver_name = get_option('null-dri-driver-name')
+endif
+
 with_glx = get_option('glx')
 if with_glx == 'auto'
   if with_platform_android
