@@ -32,6 +32,8 @@
 #include <pthread.h>
 #include <poll.h>
 #include <sys/mman.h>
+#include <fcntl.h>
+#include <xf86drm.h>
 
 #include "drm-uapi/drm_fourcc.h"
 
@@ -65,12 +67,15 @@ struct wsi_wl_display {
    struct wl_event_queue *                      queue;
 
    struct wl_shm *                              wl_shm;
+   struct wl_drm *                              wl_drm;
    struct zwp_linux_dmabuf_v1 *                 wl_dmabuf;
 
    struct wsi_wayland *wsi_wl;
 
    /* Formats populated by zwp_linux_dmabuf_v1 or wl_shm interfaces */
    struct u_vector                              formats;
+   int                                          fd;
+   bool                                         authenticated;
 
    /* Only used for displays created by wsi_wl_display_create */
    uint32_t                                     refcount;
@@ -472,6 +477,79 @@ wl_shm_format_for_vk_format(VkFormat vk_format, bool alpha)
    }
 }
 
+static int
+open_display_device(const char *name)
+{
+   int fd;
+
+#ifdef O_CLOEXEC
+   fd = open(name, O_RDWR | O_CLOEXEC);
+   if (fd != -1 || errno != EINVAL) {
+      return fd;
+   }
+#endif
+
+   fd = open(name, O_RDWR);
+   if (fd != -1) {
+      long flags = fcntl(fd, F_GETFD);
+
+      if (flags != -1) {
+         if (!fcntl(fd, F_SETFD, flags | FD_CLOEXEC))
+             return fd;
+      }
+      close (fd);
+   }
+
+   return -1;
+}
+
+static void
+drm_handle_device(void *data, struct wl_drm *drm, const char *name)
+{
+   struct wsi_wl_display *display = data;
+   const int fd = open_display_device(name);
+
+   if (fd != -1) {
+      if (drmGetNodeTypeFromFd(fd) != DRM_NODE_RENDER) {
+         drm_magic_t magic;
+
+         if (drmGetMagic(fd, &magic)) {
+            close(fd);
+	    return;
+         }
+	 wl_drm_authenticate(drm, magic);
+      } else {
+         display->authenticated = true;
+      }
+      display->fd = fd;
+   }
+}
+
+static void
+drm_handle_format(void *data, struct wl_drm *drm, uint32_t wl_format)
+{
+}
+
+static void
+drm_handle_authenticated(void *data, struct wl_drm *drm)
+{
+   struct wsi_wl_display *display = data;
+
+   display->authenticated = true;
+}
+
+static void
+drm_handle_capabilities(void *data, struct wl_drm *drm, uint32_t capabilities)
+{
+}
+
+static const struct wl_drm_listener drm_listener = {
+   drm_handle_device,
+   drm_handle_format,
+   drm_handle_authenticated,
+   drm_handle_capabilities,
+};
+
 static void
 dmabuf_handle_format(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
                      uint32_t format)
@@ -524,6 +602,15 @@ registry_handle_global(void *data, struct wl_registry *registry,
       return;
    }
 
+   if (strcmp(interface, "wl_drm") == 0) {
+      assert(display->wl_drm == NULL);
+      assert(version >= 2);
+
+      display->wl_drm =
+         wl_registry_bind(registry, name, &wl_drm_interface, 2);
+      wl_drm_add_listener(display->drm.wl_drm, &drm_listener, display);
+   }
+
    if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0 && version >= 3) {
       display->wl_dmabuf =
          wl_registry_bind(registry, name, &zwp_linux_dmabuf_v1_interface, 3);
@@ -553,12 +640,17 @@ wsi_wl_display_finish(struct wsi_wl_display *display)
    u_vector_finish(&display->formats);
    if (display->wl_shm)
       wl_shm_destroy(display->wl_shm);
+   if (display->wl_drm)
+      wl_drm_destroy(display->wl_drm);
    if (display->wl_dmabuf)
       zwp_linux_dmabuf_v1_destroy(display->wl_dmabuf);
    if (display->wl_display_wrapper)
       wl_proxy_wrapper_destroy(display->wl_display_wrapper);
    if (display->queue)
       wl_event_queue_destroy(display->queue);
+
+   if (display->fd != -1)
+      close(display->fd);
 }
 
 static VkResult
@@ -576,6 +668,7 @@ wsi_wl_display_init(struct wsi_wayland *wsi_wl,
    display->wsi_wl = wsi_wl;
    display->wl_display = wl_display;
    display->sw = sw;
+   display->fd = -1;
 
    display->queue = wl_display_create_queue(wl_display);
    if (!display->queue) {
@@ -601,25 +694,45 @@ wsi_wl_display_init(struct wsi_wayland *wsi_wl,
 
    wl_registry_add_listener(registry, &registry_listener, display);
 
-   /* Round-trip to get wl_shm and zwp_linux_dmabuf_v1 globals */
+   /* Round-trip to get wl_shm, wl_drm and zwp_linux_dmabuf_v1 globals */
    wl_display_roundtrip_queue(display->wl_display, display->queue);
    if (!display->wl_dmabuf && !display->wl_shm) {
       result = VK_ERROR_SURFACE_LOST_KHR;
       goto fail_registry;
    }
 
+   if (display->wl_dmabuf && !display->wl_drm) {
+      result = VK_ERROR_SURFACE_LOST_KHR;
+      goto fail_registry;
+   }
+
+   /* Round-trip to get display FD, formats and modifiers */
+   if (display->wl_drm || get_format_list)
+      wl_display_roundtrip_queue(display->wl_display, display->queue);
+
+   if (display->wl_drm && display->fd == -1) {
+      result = VK_ERROR_SURFACE_LOST_KHR;
+      goto fail_registry;
+   }
+
+   if (display->wl_drm) {
+      wl_display_roundtrip_queue(display->wl_display, display->queue);
+
+      if (!display->authenticated) {
+         result = VK_ERROR_SURFACE_LOST_KHR;
+         goto fail_registry;
+      }
+   }
+
    /* Caller doesn't expect us to query formats/modifiers, so return */
    if (!get_format_list)
       goto out;
-
-   /* Round-trip again to get formats and modifiers */
-   wl_display_roundtrip_queue(display->wl_display, display->queue);
 
    if (wsi_wl->wsi->force_bgra8_unorm_first) {
       /* Find BGRA8_UNORM in the list and swap it to the first position if we
        * can find it.  Some apps get confused if SRGB is first in the list.
        */
-      struct wsi_wl_format *first_fmt = u_vector_head(&display->formats);
+      struct wsi_wl_format *first_fmt = u_vector_tail(&display->formats);
       struct wsi_wl_format *f, tmp_fmt;
       f = find_format(&display->formats, VK_FORMAT_B8G8R8A8_UNORM);
       if (f) {
@@ -1148,7 +1261,7 @@ wsi_wl_image_init(struct wsi_wl_swapchain *chain,
    VkResult result;
 
    result = wsi_create_image(&chain->base, &chain->base.image_info,
-                             false, &image->base);
+                             false, display->fd, &image->base);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1349,6 +1462,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
                                        &chain->num_drm_modifiers,
                                        &chain->drm_modifiers,
                                        NULL /* alloc_shm */,
+                                       chain->display->fd,
                                        &chain->base.image_info);
    if (result != VK_SUCCESS)
       goto fail;

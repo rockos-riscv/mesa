@@ -1513,6 +1513,7 @@ static VkResult
 x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
                const VkSwapchainCreateInfoKHR *pCreateInfo,
                const VkAllocationCallbacks* pAllocator,
+               int display_fd,
                struct x11_image *image)
 {
    xcb_void_cookie_t cookie;
@@ -1521,7 +1522,7 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
    int fence_fd;
 
    result = wsi_create_image(&chain->base, &chain->base.image_info,
-                             chain->base.wsi->sw, &image->base);
+                             chain->base.wsi->sw, display_fd, &image->base);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1958,16 +1959,26 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
                                  modifiers, num_modifiers, &num_tranches,
                                  pAllocator);
 
+   int display_fd = -1;
+   if (!wsi_device->sw) {
+      xcb_screen_iterator_t screen_iter =
+         xcb_setup_roots_iterator(xcb_get_setup(conn));
+      xcb_screen_t *screen = screen_iter.data;
+
+      display_fd = wsi_dri3_open(conn, screen->root, None);
+   }
+
    if (chain->base.use_prime_blit) {
       bool use_modifier = num_tranches > 0;
       result = wsi_configure_prime_image(&chain->base, pCreateInfo,
-                                         use_modifier,
+                                         use_modifier, display_fd,
                                          &chain->base.image_info);
    } else {
       result = wsi_configure_native_image(&chain->base, pCreateInfo,
                                           num_tranches, num_modifiers,
                                           (const uint64_t *const *)modifiers,
                                           chain->has_mit_shm ? &alloc_shm : NULL,
+                                          display_fd,
                                           &chain->base.image_info);
    }
    if (result != VK_SUCCESS)
@@ -1976,9 +1987,14 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    uint32_t image = 0;
    for (; image < chain->base.image_count; image++) {
       result = x11_image_init(device, chain, pCreateInfo, pAllocator,
-                              &chain->images[image]);
+                              display_fd, &chain->images[image]);
       if (result != VK_SUCCESS)
          goto fail_init_images;
+   }
+
+   if (display_fd >= 0) {
+      close(display_fd);
+      display_fd = -1;
    }
 
    /* Initialize queues for images in our swapchain. Possible queues are:
@@ -2058,6 +2074,9 @@ fail_init_images:
 fail_modifiers:
    for (int i = 0; i < ARRAY_SIZE(modifiers); i++)
       vk_free(pAllocator, modifiers[i]);
+
+   if (display_fd >= 0)
+     close(display_fd);
 
 fail_register:
    xcb_unregister_for_special_event(chain->conn, chain->special_event);

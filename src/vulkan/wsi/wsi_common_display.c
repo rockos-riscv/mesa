@@ -1089,7 +1089,7 @@ wsi_display_image_init(VkDevice device_h,
       return VK_ERROR_DEVICE_LOST;
 
    VkResult result = wsi_create_image(&chain->base, &chain->base.image_info,
-                                      false, &image->base);
+                                      false, wsi->fd, &image->base);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1972,6 +1972,7 @@ wsi_display_surface_create_swapchain(
    result = wsi_configure_native_image(&chain->base, create_info,
                                        0, NULL, NULL,
                                        NULL /* alloc_shm */,
+                                       wsi->fd,
                                        &chain->base.image_info);
    if (result != VK_SUCCESS) {
       vk_free(allocator, chain);
