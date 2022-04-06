@@ -475,9 +475,16 @@ wsi_destroy_image_info(const struct wsi_swapchain *chain,
                        struct wsi_image_info *info)
 {
    vk_free(&chain->alloc, (void *)info->create.pQueueFamilyIndices);
+   info->create.pQueueFamilyIndices = NULL;
+
    vk_free(&chain->alloc, (void *)info->format_list.pViewFormats);
+   info->format_list.pViewFormats = NULL;
+
    vk_free(&chain->alloc, (void *)info->drm_mod_list.pDrmFormatModifiers);
+   info->drm_mod_list.pDrmFormatModifiers = NULL;
+
    vk_free(&chain->alloc, info->modifier_props);
+   info->modifier_props = NULL;
 }
 
 VkResult
