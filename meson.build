@@ -571,6 +571,41 @@ if not have_mtls_dialect
   endif
 endif
 
+# -mtls-dialect=gnu2 speeds up non-initial-exec TLS significantly but requires
+# full toolchain (including libc) support.
+have_mtls_dialect = false
+foreach c_arg : get_option('c_args')
+  if c_arg.startswith('-mtls-dialect=')
+    have_mtls_dialect = true
+    break
+  endif
+endforeach
+if not have_mtls_dialect
+  # need .run to check libc support. meson aborts when calling .run when
+  # cross-compiling, but because this is just an optimization we can skip it
+  if meson.is_cross_build() and not meson.has_exe_wrapper()
+    warning('cannot auto-detect -mtls-dialect when cross-compiling, using compiler default')
+  else
+    # -fpic to force dynamic tls, otherwise TLS relaxation defeats check
+    gnu2_test = cc.run('int __thread x; int main() { return x; }',
+                       args: ['-mtls-dialect=gnu2', '-fpic'],
+                       name: '-mtls-dialect=gnu2')
+    if gnu2_test.returncode() == 0 and (
+          # check for lld 13 bug: https://gitlab.freedesktop.org/mesa/mesa/-/issues/5665
+          host_machine.cpu_family() != 'x86_64' or
+          # get_linker_id misses LDFLAGS=-fuse-ld=lld: https://github.com/mesonbuild/meson/issues/6377
+          #cc.get_linker_id() != 'ld.lld' or
+          cc.links('''int __thread x; int y; int main() { __asm__(
+                "leaq x@TLSDESC(%rip), %rax\n"
+                "movq y@GOTPCREL(%rip), %rdx\n"
+                "call *x@TLSCALL(%rax)\n"); }''', name: 'split TLSDESC')
+          )
+      c_args += '-mtls-dialect=gnu2'
+      cpp_args += '-mtls-dialect=gnu2'
+    endif
+  endif
+endif
+
 if with_platform_windows and with_shared_glapi
   # Windows doesn't support DLL exports/imports being TLS variables. When using shared
   # glapi, libglapi.dll hosts the TLS, but other DLLs need to use them. Instead of falling
