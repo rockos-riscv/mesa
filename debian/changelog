@@ -1,3 +1,12 @@
+mesa (1:22.0.3+1rockos1) unstable; urgency=medium
+
+  * Add pvr patch (ddk 1.18)
+  * Enable pvr vulkan & dri drivers
+  * Disable swrast vulkan(disable soft vulkan)
+  * Disable draw-use-llvm
+
+ -- Han Gao <gaohan@iscas.ac.cn>  Mon, 03 Jun 2024 12:39:28 +0800
+
 mesa (22.0.3-1) unstable; urgency=medium
 
   * New upstream release.
